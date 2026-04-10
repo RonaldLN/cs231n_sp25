@@ -163,6 +163,9 @@ class FullyConnectedNet(object):
                     outi, cachei = affine_ln_relu_forward(xi, Wi, bi, gammai, betai, bn_param)
             else:
                 outi, cachei = affine_relu_forward(xi, Wi, bi)
+            if self.use_dropout:
+                outi, dropout_cache = dropout_forward(outi, self.dropout_param)
+                cachei = (*cachei, dropout_cache)
             caches.append(cachei)
             xi = outi
         W = self.params[f'W{self.num_layers}']
@@ -198,17 +201,21 @@ class FullyConnectedNet(object):
         for i in range(self.num_layers - 2, -1, -1):
             Wi = self.params[f'W{i+1}']
             bi = self.params[f'b{i+1}']
+            cachei = caches[i]
+            if self.use_dropout:
+                douti = dropout_backward(douti, cachei[-1])
+                cachei = cachei[:-1]
             if self.normalization is not None:
                 gammai = self.params[f'gamma{i+1}']
                 betai = self.params[f'beta{i+1}']
                 if self.normalization == "batchnorm":
-                    douti, dWi, dbi, dgammai, dbetai = affine_bn_relu_backward(douti, caches[i])
+                    douti, dWi, dbi, dgammai, dbetai = affine_bn_relu_backward(douti, cachei)
                 if self.normalization == "layernorm":
-                    douti, dWi, dbi, dgammai, dbetai = affine_ln_relu_backward(douti, caches[i])
+                    douti, dWi, dbi, dgammai, dbetai = affine_ln_relu_backward(douti, cachei)
                 grads[f'gamma{i+1}'] = dgammai
                 grads[f'beta{i+1}'] = dbetai
             else:
-                douti, dWi, dbi = affine_relu_backward(douti, caches[i])
+                douti, dWi, dbi = affine_relu_backward(douti, cachei)
             loss += 0.5 * self.reg * np.sum(Wi * Wi)
             dWi += self.reg * Wi
             grads[f'W{i+1}'] = dWi
